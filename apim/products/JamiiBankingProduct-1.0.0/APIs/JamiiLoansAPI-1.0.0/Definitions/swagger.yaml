@@ -1,0 +1,306 @@
+openapi: 3.0.3
+info:
+  title: JamiiLoansAPI
+  description: "Loan eligibility check for Jamii Savings. Accepts JSON, calls a legacy SOAP service through WSO2 Micro Integrator and returns JSON."
+  contact:
+    name: Jamii Savings Integration Team
+    url: https://jamii-savings.example
+    email: integrations@jamii-savings.example
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+ -
+  url: /
+security:
+ -
+  default: []
+tags:
+ -
+  name: Loans
+  description: Loan eligibility checks backed by a legacy SOAP service.
+paths:
+  /eligibility:
+    post:
+      tags:
+       - Loans
+      summary: Check loan eligibility
+      description: An applicant is eligible when the requested amount is below 12 times their monthly income.
+      operationId: checkLoanEligibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EligibilityRequest"
+            example:
+              applicantId: A123
+              monthlyIncome: 80000
+              requestedAmount: 500000
+        required: true
+      responses:
+        "200":
+          description: Decision made.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EligibilityResponse"
+              example:
+                applicantId: A123
+                decision: ELIGIBLE
+                eligible: true
+                requestedAmount: 500000
+                monthlyIncome: 80000
+                loanToIncomeMultiple: 6
+                policy: requestedAmount must be below 12 x monthlyIncome
+                requestId: 9b53d303-ecc0-4278-9f08-cddf0a7acb97
+                timestamp: 2026-10-11T14:00:47.127+03:00
+        "400":
+          description: "Body is not valid JSON, or a field is missing or malformed."
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: Request body must be valid JSON.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "502":
+          description: The eligibility service could not evaluate the request (for example it returned a SOAP fault).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: ELIGIBILITY_SERVICE_ERROR
+                  message: The eligibility service could not evaluate this request.
+                  status: 502
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The eligibility service is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_UNAVAILABLE
+                  message: The eligibility service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "504":
+          description: The eligibility service timed out.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_TIMEOUT
+                  message: The eligibility service took too long to respond.
+                  status: 504
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+      x-wso2-application-security:
+        security-types:
+         - api_key
+        optional: false
+components:
+  schemas:
+    EligibilityRequest:
+      required:
+       - applicantId
+       - monthlyIncome
+       - requestedAmount
+      type: object
+      properties:
+        applicantId:
+          pattern: "^[A-Za-z0-9-]{1,20}$"
+          type: string
+        monthlyIncome:
+          maximum: 999999999
+          minimum: 0
+          type: integer
+          description: Whole number. 0 is accepted and makes the upstream service fault (used to demonstrate fault mapping).
+        requestedAmount:
+          maximum: 999999999
+          minimum: 1
+          type: integer
+    EligibilityResponse:
+      required:
+       - applicantId
+       - decision
+       - eligible
+       - loanToIncomeMultiple
+       - monthlyIncome
+       - requestId
+       - requestedAmount
+       - timestamp
+      type: object
+      properties:
+        applicantId:
+          type: string
+        decision:
+          type: string
+          enum:
+           - ELIGIBLE
+           - NOT_ELIGIBLE
+        eligible:
+          type: boolean
+        requestedAmount:
+          type: integer
+        monthlyIncome:
+          type: integer
+        loanToIncomeMultiple:
+          type: integer
+          description: Whole-number result of requestedAmount divided by monthlyIncome.
+        policy:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+    Error:
+      required:
+       - error
+       - requestId
+       - timestamp
+      type: object
+      properties:
+        error:
+          required:
+           - code
+           - message
+           - status
+          type: object
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: "Safe, human-readable message. Never contains backend or SQL details."
+            status:
+              type: integer
+              description: "HTTP status code, repeated in the body."
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+      description: Standard error envelope used by every Jamii Savings API.
+  headers:
+    CorrelationId:
+      description: Correlation ID for tracing this call across systems.
+      style: simple
+      explode: false
+      schema:
+        type: string
+  securitySchemes:
+    default:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.com
+          scopes: {}
+x-wso2-auth-header: Authorization
+x-wso2-api-key-header: ApiKey
+x-wso2-cors:
+  corsConfigurationEnabled: false
+  accessControlAllowOrigins:
+   - '*'
+  accessControlAllowCredentials: false
+  accessControlAllowHeaders:
+   - authorization
+   - Access-Control-Allow-Origin
+   - Content-Type
+   - SOAPAction
+   - apikey
+   - Internal-Key
+  accessControlAllowMethods:
+   - GET
+   - PUT
+   - POST
+   - DELETE
+   - PATCH
+   - OPTIONS
+x-wso2-production-endpoints:
+  urls:
+   - http://localhost:8290/loans
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+   - http://localhost:8290/loans
+  type: http
+x-wso2-basePath: /loans/1.0.0
+x-wso2-transports:
+ - http
+ - https
+x-wso2-application-security:
+  security-types:
+   - api_key
+  optional: false
+x-wso2-response-cache:
+  enabled: false
+  cacheTimeoutInSeconds: 300

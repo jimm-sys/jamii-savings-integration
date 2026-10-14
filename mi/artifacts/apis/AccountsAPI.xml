@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<api name="AccountsAPI" context="/accounts" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="GET" uri-template="/{accountNumber}/balance">
+        <inSequence>
+            <!-- 1. Correlation + masked logging (show only last 4 digits) -->
+            <property name="REQUEST_ID" expression="fn:substring-after(get-property('MessageID'), 'urn:uuid:')"/>
+            <property name="CORR_ID" expression="get-property('REQUEST_ID')"/>
+            <property name="MASKED_ACCT" expression="fn:concat('******', fn:substring(get-property('uri.var.accountNumber'), fn:string-length(get-property('uri.var.accountNumber')) - 3))"/>
+            <log level="custom">
+                <property name="event" value="REQUEST_IN"/>
+                <property name="api" value="AccountsAPI.balance"/>
+                <property name="requestId" expression="get-property('REQUEST_ID')"/>
+                <property name="account" expression="get-property('MASKED_ACCT')"/>
+            </log>
+
+            <!-- 2. Validate input: must be exactly 10 digits, otherwise 400 (not 500) -->
+            <filter source="get-property('uri.var.accountNumber')" regex="^[0-9]{10}$">
+                <then>
+                    <!-- 3. Parameterized query: the ? is bound, never string-concatenated -->
+                    <dblookup>
+                        <connection>
+                            <pool>
+                                <dsName>jdbc/JamiiDB</dsName>
+                            </pool>
+                        </connection>
+                        <statement>
+                            <sql>SELECT account_number, status, balance, currency FROM accounts WHERE account_number = ?</sql>
+                            <parameter expression="get-property('uri.var.accountNumber')" type="VARCHAR"/>
+                            <result name="DB_ACCT" column="account_number"/>
+                            <result name="DB_STATUS" column="status"/>
+                            <result name="DB_BALANCE" column="balance"/>
+                            <result name="DB_CURRENCY" column="currency"/>
+                        </statement>
+                    </dblookup>
+                    <log level="custom">
+                        <property name="event" value="BACKEND_CALL_DONE"/>
+                        <property name="requestId" expression="get-property('REQUEST_ID')"/>
+                        <property name="account" expression="get-property('MASKED_ACCT')"/>
+                    </log>
+
+                    <!-- 4. Found or not found -->
+                    <filter source="get-property('DB_ACCT')" regex=".+">
+                        <then>
+                            <property name="TS" expression="fn:concat(get-property('SYSTEM_DATE','yyyy-MM-dd'),'T',get-property('SYSTEM_DATE','HH:mm:ss.SSS'),get-property('SYSTEM_DATE','XXX'))"/>
+                            <payloadFactory media-type="json">
+                                <format>{"accountNumber":"$1","status":"$2","balance":{"amount":$3,"currency":"$4"},"requestId":"$5","timestamp":"$6"}</format>
+                                <args>
+                                    <arg expression="get-property('DB_ACCT')" evaluator="xml"/>
+                                    <arg expression="get-property('DB_STATUS')" evaluator="xml"/>
+                                    <arg expression="get-property('DB_BALANCE')" evaluator="xml"/>
+                                    <arg expression="get-property('DB_CURRENCY')" evaluator="xml"/>
+                                    <arg expression="get-property('REQUEST_ID')" evaluator="xml"/>
+                                    <arg expression="get-property('TS')" evaluator="xml"/>
+                                </args>
+                            </payloadFactory>
+                            <property name="HTTP_SC" value="200" scope="axis2"/>
+                            <property name="messageType" value="application/json" scope="axis2"/>
+                            <log level="custom">
+                                <property name="event" value="RESPONSE_OUT"/>
+                                <property name="requestId" expression="get-property('REQUEST_ID')"/>
+                                <property name="account" expression="get-property('MASKED_ACCT')"/>
+                                <property name="status" value="200"/>
+                            </log>
+                            <sequence key="JamiiStripHeadersSeq"/>
+                            <respond/>
+                        </then>
+                        <else>
+                            <property name="ERR_HTTP_SC" value="404"/>
+                            <property name="ERR_CODE" value="ACCOUNT_NOT_FOUND"/>
+                            <property name="ERR_MESSAGE" value="No account exists with the supplied account number."/>
+                            <sequence key="JamiiErrorSeq"/>
+                        </else>
+                    </filter>
+                </then>
+                <else>
+                    <property name="ERR_HTTP_SC" value="400"/>
+                    <property name="ERR_CODE" value="INVALID_REQUEST"/>
+                    <property name="ERR_MESSAGE" value="accountNumber must be exactly 10 digits."/>
+                    <sequence key="JamiiErrorSeq"/>
+                </else>
+            </filter>
+        </inSequence>
+        <faultSequence>
+            <!-- Anything that breaks after validation (e.g. DB down) lands here.
+                 Real cause goes to the log; the client only gets a safe message. -->
+            <log level="custom">
+                <property name="event" value="BACKEND_FAULT"/>
+                <property name="requestId" expression="get-property('REQUEST_ID')"/>
+                <property name="account" expression="get-property('MASKED_ACCT')"/>
+                <property name="cause" expression="get-property('ERROR_MESSAGE')"/>
+            </log>
+            <property name="ERR_HTTP_SC" value="503"/>
+            <property name="ERR_CODE" value="DATABASE_ERROR"/>
+            <property name="ERR_MESSAGE" value="The account service is temporarily unavailable. Please try again later."/>
+            <sequence key="JamiiErrorSeq"/>
+        </faultSequence>
+    </resource>
+</api>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared error responder used by ALL Jamii Savings APIs.
+  Caller sets three properties before invoking it:
+    ERR_HTTP_SC  - HTTP status to return (400, 404, 503 ...)
+    ERR_CODE     - stable machine-readable code (INVALID_REQUEST, ACCOUNT_NOT_FOUND ...)
+    ERR_MESSAGE  - safe, human-readable message (never raw backend/SQL/SOAP text)
+-->
+<sequence name="JamiiErrorSeq" xmlns="http://ws.apache.org/ns/synapse">
+    <sequence key="JamiiStripHeadersSeq"/>
+    <property name="HTTP_SC" expression="get-property('ERR_HTTP_SC')" scope="axis2"/>
+    <property name="messageType" value="application/json" scope="axis2"/>
+    <property name="REQUEST_ID" expression="fn:substring-after(get-property('MessageID'), 'urn:uuid:')"/>
+    <property name="TS" expression="fn:concat(get-property('SYSTEM_DATE','yyyy-MM-dd'),'T',get-property('SYSTEM_DATE','HH:mm:ss.SSS'),get-property('SYSTEM_DATE','XXX'))"/>
+    <payloadFactory media-type="json">
+        <format>{"error":{"code":"$1","message":"$2","status":$3},"requestId":"$4","timestamp":"$5"}</format>
+        <args>
+            <arg expression="get-property('ERR_CODE')" evaluator="xml"/>
+            <arg expression="get-property('ERR_MESSAGE')" evaluator="xml"/>
+            <arg expression="get-property('ERR_HTTP_SC')" evaluator="xml"/>
+            <arg expression="get-property('REQUEST_ID')" evaluator="xml"/>
+            <arg expression="get-property('TS')" evaluator="xml"/>
+        </args>
+    </payloadFactory>
+    <log level="custom">
+        <property name="event" value="RESPONSE_OUT_ERROR"/>
+        <property name="requestId" expression="get-property('REQUEST_ID')"/>
+        <property name="status" expression="get-property('ERR_HTTP_SC')"/>
+        <property name="code" expression="get-property('ERR_CODE')"/>
+    </log>
+    <respond/>
+</sequence>

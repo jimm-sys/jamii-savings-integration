@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<api name="LoansAPI" context="/loans" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="POST" uri-template="/eligibility">
+        <inSequence>
+            <property name="REQUEST_ID" expression="fn:substring-after(get-property('MessageID'), 'urn:uuid:')"/>
+
+            <!-- Correlation ID: keep the caller's if it looks sane, else generate -->
+            <filter source="get-property('transport','X-Correlation-ID')" regex="^[A-Za-z0-9-]{8,64}$">
+                <then>
+                    <property name="CORR_ID" expression="get-property('transport','X-Correlation-ID')"/>
+                </then>
+                <else>
+                    <property name="CORR_ID" expression="get-property('REQUEST_ID')"/>
+                </else>
+            </filter>
+
+            <!-- Pull the three fields out of the JSON body -->
+            <property name="A_ID" expression="json-eval($.applicantId)"/>
+            <property name="INCOME" expression="json-eval($.monthlyIncome)"/>
+            <property name="AMOUNT" expression="json-eval($.requestedAmount)"/>
+            <property name="MASKED_APP" expression="fn:concat('****', fn:substring(get-property('A_ID'), fn:string-length(get-property('A_ID')) - 1))"/>
+            <log level="custom">
+                <!-- applicant ID is masked; income and amount are never logged -->
+                <property name="event" value="REQUEST_IN"/>
+                <property name="api" value="LoansAPI.eligibility"/>
+                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                <property name="applicant" expression="get-property('MASKED_APP')"/>
+            </log>
+
+            <!-- Validate: applicantId 1-20 chars; income whole number 0..999999999;
+                 amount whole number 1..999999999 -> otherwise 400 -->
+            <filter source="fn:concat(get-property('A_ID'), '|', get-property('INCOME'), '|', get-property('AMOUNT'))" regex="^[A-Za-z0-9-]{1,20}\|[0-9]{1,9}\|[1-9][0-9]{0,8}$">
+                <then>
+                    <!-- REST/JSON -> SOAP/XML: Divide(intA = amount, intB = income) -->
+                    <payloadFactory media-type="xml">
+                        <format>
+                            <tem:Divide xmlns:tem="http://tempuri.org/">
+                                <tem:intA>$1</tem:intA>
+                                <tem:intB>$2</tem:intB>
+                            </tem:Divide>
+                        </format>
+                        <args>
+                            <arg expression="get-property('AMOUNT')"/>
+                            <arg expression="get-property('INCOME')"/>
+                        </args>
+                    </payloadFactory>
+                    <!-- Allow-list for the backend too: drop every inbound header, then add ours -->
+                    <property name="TRANSPORT_HEADERS" action="remove" scope="axis2"/>
+                    <property name="messageType" value="text/xml" scope="axis2"/>
+                    <!-- Legacy SOAP stacks often reject chunked bodies: send a plain Content-Length instead -->
+                    <property name="DISABLE_CHUNKING" value="true" scope="axis2"/>
+                    <header name="Action" value="http://tempuri.org/Divide"/>
+                    <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                    <header name="User-Agent" scope="transport" value="JamiiSavings-Gateway/1.0"/>
+                    <log level="custom">
+                        <property name="event" value="BACKEND_CALL"/>
+                        <property name="correlationId" expression="get-property('CORR_ID')"/>
+                        <property name="applicant" expression="get-property('MASKED_APP')"/>
+                    </log>
+                    <property name="BACKEND_CALLED" value="true"/>
+                    <call>
+                        <endpoint key="EligibilitySoapEP"/>
+                    </call>
+                    <property name="BACKEND_SC" expression="get-property('axis2','HTTP_SC')"/>
+                    <log level="custom">
+                        <property name="event" value="BACKEND_RESPONSE"/>
+                        <property name="correlationId" expression="get-property('CORR_ID')"/>
+                        <property name="backendStatus" expression="get-property('BACKEND_SC')"/>
+                    </log>
+
+                    <!-- Did the SOAP service answer with a Fault? -->
+                    <filter xpath="boolean(//soapenv:Fault)" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+                        <then>
+                            <!-- Raw fault text (may contain stack traces) goes to the log, trimmed; never to the client -->
+                            <property name="FAULT_TEXT" expression="fn:substring(string(//*[local-name()='faultstring']), 1, 120)"/>
+                            <log level="custom">
+                                <property name="event" value="SOAP_FAULT"/>
+                                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                                <property name="faultCode" expression="string(//*[local-name()='faultcode'])"/>
+                                <property name="faultSummary" expression="get-property('FAULT_TEXT')"/>
+                            </log>
+                            <property name="ERR_HTTP_SC" value="502"/>
+                            <property name="ERR_CODE" value="ELIGIBILITY_SERVICE_ERROR"/>
+                            <property name="ERR_MESSAGE" value="The eligibility service could not evaluate this request."/>
+                            <sequence key="JamiiErrorSeq"/>
+                        </then>
+                        <else>
+                            <property name="MULTIPLE" expression="string(//ns:DivideResult)" xmlns:ns="http://tempuri.org/"/>
+                            <filter source="get-property('MULTIPLE')" regex="^[0-9]+$">
+                                <then>
+                                    <!-- Policy: eligible when requested amount is below 12 x monthly income.
+                                         The service divides whole numbers (rounds down), so result < 12  <=>  amount < 12 x income -->
+                                    <filter xpath="number(get-property('MULTIPLE')) &lt; 12">
+                                        <then>
+                                            <property name="DECISION" value="ELIGIBLE"/>
+                                            <property name="IS_ELIGIBLE" value="true"/>
+                                        </then>
+                                        <else>
+                                            <property name="DECISION" value="NOT_ELIGIBLE"/>
+                                            <property name="IS_ELIGIBLE" value="false"/>
+                                        </else>
+                                    </filter>
+                                    <property name="TS" expression="fn:concat(get-property('SYSTEM_DATE','yyyy-MM-dd'),'T',get-property('SYSTEM_DATE','HH:mm:ss.SSS'),get-property('SYSTEM_DATE','XXX'))"/>
+                                    <payloadFactory media-type="json">
+                                        <format>{"applicantId":"$1","decision":"$2","eligible":$3,"requestedAmount":$4,"monthlyIncome":$5,"loanToIncomeMultiple":$6,"policy":"requestedAmount must be below 12 x monthlyIncome","requestId":"$7","timestamp":"$8"}</format>
+                                        <args>
+                                            <arg expression="get-property('A_ID')" evaluator="xml"/>
+                                            <arg expression="get-property('DECISION')" evaluator="xml"/>
+                                            <arg expression="get-property('IS_ELIGIBLE')" evaluator="xml"/>
+                                            <arg expression="get-property('AMOUNT')" evaluator="xml"/>
+                                            <arg expression="get-property('INCOME')" evaluator="xml"/>
+                                            <arg expression="get-property('MULTIPLE')" evaluator="xml"/>
+                                            <arg expression="get-property('REQUEST_ID')" evaluator="xml"/>
+                                            <arg expression="get-property('TS')" evaluator="xml"/>
+                                        </args>
+                                    </payloadFactory>
+                                    <property name="HTTP_SC" value="200" scope="axis2"/>
+                                    <property name="messageType" value="application/json" scope="axis2"/>
+                                    <sequence key="JamiiStripHeadersSeq"/>
+                                    <log level="custom">
+                                        <property name="event" value="RESPONSE_OUT"/>
+                                        <property name="correlationId" expression="get-property('CORR_ID')"/>
+                                        <property name="applicant" expression="get-property('MASKED_APP')"/>
+                                        <property name="decision" expression="get-property('DECISION')"/>
+                                    </log>
+                                    <respond/>
+                                </then>
+                                <else>
+                                    <!-- 200 but no usable result -->
+                                    <property name="ERR_HTTP_SC" value="502"/>
+                                    <property name="ERR_CODE" value="BAD_GATEWAY"/>
+                                    <property name="ERR_MESSAGE" value="The eligibility service returned an unexpected response."/>
+                                    <sequence key="JamiiErrorSeq"/>
+                                </else>
+                            </filter>
+                        </else>
+                    </filter>
+                </then>
+                <else>
+                    <property name="ERR_HTTP_SC" value="400"/>
+                    <property name="ERR_CODE" value="INVALID_REQUEST"/>
+                    <property name="ERR_MESSAGE" value="Body must be JSON with applicantId (1-20 letters, digits or dashes), monthlyIncome (whole number, 0 or more) and requestedAmount (whole number, 1 or more)."/>
+                    <sequence key="JamiiErrorSeq"/>
+                </else>
+            </filter>
+        </inSequence>
+        <faultSequence>
+            <log level="custom">
+                <property name="event" value="BACKEND_FAULT"/>
+                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                <property name="applicant" expression="get-property('MASKED_APP')"/>
+                <property name="errorCode" expression="get-property('ERROR_CODE')"/>
+                <property name="cause" expression="get-property('ERROR_MESSAGE')"/>
+            </log>
+            <filter source="get-property('BACKEND_CALLED')" regex="true">
+                <then>
+                    <!-- failure happened while talking to / reading from the SOAP service -->
+                    <filter source="get-property('ERROR_MESSAGE')" regex="(?s).*Error while building.*">
+                        <then>
+                            <!-- backend answered, but not with a parseable SOAP/XML message (e.g. an HTML error page) -->
+                            <property name="ERR_HTTP_SC" value="502"/>
+                            <property name="ERR_CODE" value="BAD_GATEWAY"/>
+                            <property name="ERR_MESSAGE" value="The eligibility service returned an unexpected response."/>
+                        </then>
+                        <else>
+                            <filter source="get-property('ERROR_CODE')" regex="101504|101508">
+                                <then>
+                                    <property name="ERR_HTTP_SC" value="504"/>
+                                    <property name="ERR_CODE" value="BACKEND_TIMEOUT"/>
+                                    <property name="ERR_MESSAGE" value="The eligibility service took too long to respond."/>
+                                </then>
+                                <else>
+                                    <property name="ERR_HTTP_SC" value="503"/>
+                                    <property name="ERR_CODE" value="BACKEND_UNAVAILABLE"/>
+                                    <property name="ERR_MESSAGE" value="The eligibility service is temporarily unavailable. Please try again later."/>
+                                </else>
+                            </filter>
+                        </else>
+                    </filter>
+                </then>
+                <else>
+                    <!-- failure BEFORE the backend call: either the caller's body was not parseable JSON, or something unexpected -->
+                    <filter source="get-property('ERROR_MESSAGE')" regex="(?s).*Error while building.*">
+                        <then>
+                            <property name="ERR_HTTP_SC" value="400"/>
+                            <property name="ERR_CODE" value="INVALID_REQUEST"/>
+                            <property name="ERR_MESSAGE" value="Request body must be valid JSON."/>
+                        </then>
+                        <else>
+                            <property name="ERR_HTTP_SC" value="500"/>
+                            <property name="ERR_CODE" value="INTERNAL_ERROR"/>
+                            <property name="ERR_MESSAGE" value="An unexpected error occurred."/>
+                        </else>
+                    </filter>
+                </else>
+            </filter>
+            <sequence key="JamiiErrorSeq"/>
+        </faultSequence>
+    </resource>
+</api>

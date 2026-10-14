@@ -1,0 +1,7 @@
+build/
+*.car
+*.jar
+body.json
+fault.json
+.wso2apictl*/
+keys.json

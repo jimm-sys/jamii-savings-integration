@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<api name="CustomersAPI" context="/customers" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="GET" uri-template="/{customerId}">
+        <inSequence>
+            <property name="REQUEST_ID" expression="fn:substring-after(get-property('MessageID'), 'urn:uuid:')"/>
+            <property name="MASKED_CUST" expression="fn:concat('****', fn:substring(get-property('uri.var.customerId'), fn:string-length(get-property('uri.var.customerId')) - 1))"/>
+
+            <!-- 1. Correlation ID: keep the caller's if it looks sane, otherwise generate one.
+                    (Validating it stops log-injection via a crafted header.) -->
+            <filter source="get-property('transport','X-Correlation-ID')" regex="^[A-Za-z0-9-]{8,64}$">
+                <then>
+                    <property name="CORR_ID" expression="get-property('transport','X-Correlation-ID')"/>
+                </then>
+                <else>
+                    <property name="CORR_ID" expression="get-property('REQUEST_ID')"/>
+                </else>
+            </filter>
+            <log level="custom">
+                <property name="event" value="REQUEST_IN"/>
+                <property name="api" value="CustomersAPI.get"/>
+                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                <property name="customer" expression="get-property('MASKED_CUST')"/>
+            </log>
+
+            <!-- 2. Validate input -> 400, never 500 -->
+            <filter source="get-property('uri.var.customerId')" regex="^[0-9]{1,10}$">
+                <then>
+                    <!-- 3. Outbound headers: add correlation ID, do not leak gateway credentials -->
+                    <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                    <header name="Authorization" action="remove" scope="transport"/>
+                    <header name="X-Internal-Auth" action="remove" scope="transport"/>
+                    <header name="Cookie" action="remove" scope="transport"/>
+                    <header name="Host" action="remove" scope="transport"/>
+                    <header name="User-Agent" scope="transport" value="JamiiSavings-Gateway/1.0"/>
+                    <header name="Accept" scope="transport" value="application/json"/>
+                    <log level="custom">
+                        <property name="event" value="BACKEND_CALL"/>
+                        <property name="correlationId" expression="get-property('CORR_ID')"/>
+                        <property name="customer" expression="get-property('MASKED_CUST')"/>
+                    </log>
+                    <call>
+                        <endpoint key="CustomerBackendEP"/>
+                    </call>
+                    <property name="BACKEND_SC" expression="get-property('axis2','HTTP_SC')"/>
+                    <log level="custom">
+                        <property name="event" value="BACKEND_RESPONSE"/>
+                        <property name="correlationId" expression="get-property('CORR_ID')"/>
+                        <property name="backendStatus" expression="get-property('BACKEND_SC')"/>
+                    </log>
+
+                    <!-- 4. Map the backend outcome onto our own contract -->
+                    <switch source="get-property('BACKEND_SC')">
+                        <case regex="2[0-9][0-9]">
+                            <sequence key="JamiiStripHeadersSeq"/>
+                            <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                            <log level="custom">
+                                <property name="event" value="RESPONSE_OUT"/>
+                                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                                <property name="status" expression="get-property('BACKEND_SC')"/>
+                            </log>
+                            <respond/>
+                        </case>
+                        <case regex="404">
+                            <property name="ERR_HTTP_SC" value="404"/>
+                            <property name="ERR_CODE" value="CUSTOMER_NOT_FOUND"/>
+                            <property name="ERR_MESSAGE" value="No customer exists with the supplied customer ID."/>
+                            <sequence key="JamiiStripHeadersSeq"/>
+                            <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                            <sequence key="JamiiErrorSeq"/>
+                        </case>
+                        <default>
+                            <property name="ERR_HTTP_SC" value="502"/>
+                            <property name="ERR_CODE" value="BAD_GATEWAY"/>
+                            <property name="ERR_MESSAGE" value="The customer service returned an unexpected response."/>
+                            <sequence key="JamiiStripHeadersSeq"/>
+                            <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                            <sequence key="JamiiErrorSeq"/>
+                        </default>
+                    </switch>
+                </then>
+                <else>
+                    <property name="ERR_HTTP_SC" value="400"/>
+                    <property name="ERR_CODE" value="INVALID_REQUEST"/>
+                    <property name="ERR_MESSAGE" value="customerId must be 1 to 10 digits."/>
+                    <sequence key="JamiiStripHeadersSeq"/>
+                    <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+                    <sequence key="JamiiErrorSeq"/>
+                </else>
+            </filter>
+        </inSequence>
+        <faultSequence>
+            <!-- Backend unreachable / timed out. Cause goes to the log only. -->
+            <log level="custom">
+                <property name="event" value="BACKEND_FAULT"/>
+                <property name="correlationId" expression="get-property('CORR_ID')"/>
+                <property name="customer" expression="get-property('MASKED_CUST')"/>
+                <property name="errorCode" expression="get-property('ERROR_CODE')"/>
+                <property name="cause" expression="get-property('ERROR_MESSAGE')"/>
+            </log>
+            <filter source="get-property('ERROR_CODE')" regex="101504|101508">
+                <then>
+                    <property name="ERR_HTTP_SC" value="504"/>
+                    <property name="ERR_CODE" value="BACKEND_TIMEOUT"/>
+                    <property name="ERR_MESSAGE" value="The customer service took too long to respond."/>
+                </then>
+                <else>
+                    <property name="ERR_HTTP_SC" value="503"/>
+                    <property name="ERR_CODE" value="BACKEND_UNAVAILABLE"/>
+                    <property name="ERR_MESSAGE" value="The customer service is temporarily unavailable. Please try again later."/>
+                </else>
+            </filter>
+            <sequence key="JamiiStripHeadersSeq"/>
+            <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+            <sequence key="JamiiErrorSeq"/>
+        </faultSequence>
+    </resource>
+</api>

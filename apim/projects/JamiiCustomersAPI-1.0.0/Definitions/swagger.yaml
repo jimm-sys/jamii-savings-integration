@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: JamiiCustomersAPI
+  description: "Customer lookup for Jamii Savings. A managed proxy to a customer REST service, with correlation IDs, timeouts and a standard error shape."
+  contact:
+    name: Jamii Savings Integration Team
+    url: https://jamii-savings.example
+    email: integrations@jamii-savings.example
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+ -
+  url: /
+security:
+ -
+  default: []
+tags:
+ -
+  name: Customers
+  description: Customer lookups proxied from the customer service.
+paths:
+  /{id}:
+    get:
+      tags:
+       - Customers
+      summary: Get a customer by ID
+      description: Get a customer by ID.
+      operationId: getCustomer
+      parameters:
+       -
+        name: X-Correlation-ID
+        in: header
+        description: "Optional trace ID (8-64 letters, digits or dashes). Generated if absent or invalid."
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Customer found.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: customerId is not 1 to 10 digits.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: customerId must be 1 to 10 digits.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "404":
+          description: No customer with that ID.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: CUSTOMER_NOT_FOUND
+                  message: No customer exists with the supplied customer ID.
+                  status: 404
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "502":
+          description: The customer service returned an unexpected response.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BAD_GATEWAY
+                  message: The customer service returned an unexpected response.
+                  status: 502
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The customer service is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_UNAVAILABLE
+                  message: The customer service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "504":
+          description: The customer service timed out.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_TIMEOUT
+                  message: The customer service took too long to respond.
+                  status: 504
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+      x-wso2-application-security:
+        security-types:
+         - api_key
+        optional: false
+    parameters:
+     -
+      name: id
+      in: path
+      description: "Customer ID, 1 to 10 digits."
+      required: true
+      style: simple
+      explode: false
+      schema:
+        pattern: "^[0-9]{1,10}$"
+        type: string
+      example: "1"
+components:
+  schemas:
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            suite:
+              type: string
+            city:
+              type: string
+            zipcode:
+              type: string
+            geo:
+              type: object
+              properties:
+                lat:
+                  type: string
+                lng:
+                  type: string
+        company:
+          type: object
+          properties:
+            name:
+              type: string
+            catchPhrase:
+              type: string
+            bs:
+              type: string
+      description: "Customer record, passed through from the backend service."
+    Error:
+      required:
+       - error
+       - requestId
+       - timestamp
+      type: object
+      properties:
+        error:
+          required:
+           - code
+           - message
+           - status
+          type: object
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: "Safe, human-readable message. Never contains backend or SQL details."
+            status:
+              type: integer
+              description: "HTTP status code, repeated in the body."
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+      description: Standard error envelope used by every Jamii Savings API.
+  headers:
+    CorrelationId:
+      description: Correlation ID for tracing this call across systems.
+      style: simple
+      explode: false
+      schema:
+        type: string
+  securitySchemes:
+    default:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.com
+          scopes: {}
+x-wso2-auth-header: Authorization
+x-wso2-api-key-header: ApiKey
+x-wso2-cors:
+  corsConfigurationEnabled: false
+  accessControlAllowOrigins:
+   - '*'
+  accessControlAllowCredentials: false
+  accessControlAllowHeaders:
+   - authorization
+   - Access-Control-Allow-Origin
+   - Content-Type
+   - SOAPAction
+   - apikey
+   - Internal-Key
+  accessControlAllowMethods:
+   - GET
+   - PUT
+   - POST
+   - DELETE
+   - PATCH
+   - OPTIONS
+x-wso2-production-endpoints:
+  urls:
+   - http://localhost:8290/customers
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+   - http://localhost:8290/customers
+  type: http
+x-wso2-basePath: /customers/1.0.0
+x-wso2-transports:
+ - http
+ - https
+x-wso2-application-security:
+  security-types:
+   - api_key
+  optional: false
+x-wso2-response-cache:
+  enabled: false
+  cacheTimeoutInSeconds: 300

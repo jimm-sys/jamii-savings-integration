@@ -1,0 +1,17 @@
+# Add to <MI_HOME>/conf/deployment.toml (then restart MI). DEMO credentials only.
+
+[[datasource]]
+id = "JamiiDB"
+url = "jdbc:postgresql://localhost:5432/jamii"
+username = "jamii"
+password = "jamii123"
+driver = "org.postgresql.Driver"
+pool_options.maxActive = 10
+pool_options.maxWait = 5000
+
+[passthru_properties]
+"http.server.preserve" = false
+"http.user.agent.preserve" = true
+
+[synapse_properties]
+"synapse.timeout_handler_interval" = 1000

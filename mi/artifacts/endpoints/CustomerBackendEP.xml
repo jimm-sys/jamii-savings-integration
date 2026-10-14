@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Backend for the customer proxy.
+     * timeout: if the backend does not answer within 5s we stop waiting and raise a fault.
+     * suspendOnFailure: a simple circuit breaker. After a connection failure (101503) or a
+       timeout (101504) the endpoint is skipped for 5s, so a struggling or dead backend fails
+       fast (503) instead of piling up requests, then it is retried automatically.
+       Trade-off: one slow call also rejects other callers for those 5s. -->
+<endpoint name="CustomerBackendEP" xmlns="http://ws.apache.org/ns/synapse">
+    <http method="GET" uri-template="https://jsonplaceholder.typicode.com/users/{uri.var.customerId}">
+        <timeout>
+            <duration>5000</duration>
+            <responseAction>fault</responseAction>
+        </timeout>
+        <suspendOnFailure>
+            <errorCodes>101503,101504</errorCodes>
+            <initialDuration>5000</initialDuration>
+            <progressionFactor>1.0</progressionFactor>
+            <maximumDuration>5000</maximumDuration>
+        </suspendOnFailure>
+    </http>
+</endpoint>

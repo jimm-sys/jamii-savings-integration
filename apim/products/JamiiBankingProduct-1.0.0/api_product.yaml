@@ -1,0 +1,124 @@
+type: api_product
+version: v4.6.0
+data:
+  id: 802c9d81-c874-4591-b9a8-0a0277e61c02
+  name: JamiiBankingProduct
+  displayName: JamiiBankingProduct
+  context: /banking
+  version: 1.0.0
+  provider: admin
+  hasThumbnail: false
+  state: PUBLISHED
+  enableSchemaValidation: false
+  isDefaultVersion: true
+  isRevision: false
+  revisionId: 0
+  responseCachingEnabled: false
+  cacheTimeout: 300
+  visibility: PUBLIC
+  visibleRoles: []
+  visibleTenants: []
+  accessControl: NONE
+  accessControlRoles: []
+  transport:
+   - http
+   - https
+  tags: []
+  policies:
+   - Gold
+  authorizationHeader: Authorization
+  apiKeyHeader: ApiKey
+  securityScheme:
+   - oauth_basic_auth_api_key_mandatory
+   - oauth2
+  subscriptionAvailability: ALL_TENANTS
+  subscriptionAvailableTenants: []
+  additionalProperties: []
+  additionalPropertiesMap: {}
+  businessInformation: {}
+  corsConfiguration:
+    corsConfigurationEnabled: false
+    accessControlAllowOrigins:
+     - '*'
+    accessControlAllowCredentials: false
+    accessControlAllowHeaders:
+     - authorization
+     - Access-Control-Allow-Origin
+     - Content-Type
+     - SOAPAction
+     - apikey
+     - Internal-Key
+    accessControlAllowMethods:
+     - GET
+     - PUT
+     - POST
+     - DELETE
+     - PATCH
+     - OPTIONS
+  createdTime: "1791947701387"
+  gatewayVendor: wso2
+  apis:
+   -
+    name: JamiiLoansAPI
+    apiId: 5c5ab9d3-b242-453a-9338-a244e6b8db6a
+    version: 1.0.0
+    operations:
+     -
+      id: ""
+      target: /eligibility
+      verb: POST
+      authType: Application & Application User
+      throttlingPolicy: Unlimited
+      scopes: []
+      usedProductIds: []
+      operationPolicies:
+        request: []
+        response: []
+        fault: []
+   -
+    name: JamiiCustomersAPI
+    apiId: 82bd6dae-7f38-4332-a972-4e4e1acb71e8
+    version: 1.0.0
+    operations:
+     -
+      id: ""
+      target: "/{id}"
+      verb: GET
+      authType: Application & Application User
+      throttlingPolicy: Unlimited
+      scopes: []
+      usedProductIds: []
+      operationPolicies:
+        request: []
+        response:
+         -
+          policyName: addHeader
+          policyVersion: v2
+          policyType: common
+          policyId: 92464a65-b1f3-4528-9da6-4db04c2898c6
+          parameters:
+            headerValue: Jamii-APIM-Gateway
+            headerName: X-Served-By
+        fault: []
+   -
+    name: JamiiAccountsAPI
+    apiId: 2db16d33-3633-4452-83d9-a3a930e4c034
+    version: 1.0.0
+    operations:
+     -
+      id: ""
+      target: "/{id}/balance"
+      verb: GET
+      authType: Application & Application User
+      throttlingPolicy: Unlimited
+      scopes: []
+      usedProductIds: []
+      operationPolicies:
+        request: []
+        response: []
+        fault: []
+  scopes: []
+  categories: []
+  audiences:
+   - all
+  egress: false

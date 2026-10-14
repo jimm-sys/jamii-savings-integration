@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: JamiiAccountsAPI
+  description: Account balance lookup for Jamii Savings. Backed by a database through WSO2 Micro Integrator.
+  contact:
+    name: Jamii Savings Integration Team
+    url: https://jamii-savings.example
+    email: integrations@jamii-savings.example
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+ -
+  url: /
+security:
+ -
+  default: []
+tags:
+ -
+  name: Accounts
+  description: Account balance lookups backed by the core database.
+paths:
+  /{id}/balance:
+    get:
+      tags:
+       - Accounts
+      summary: Get the balance of an account
+      description: Get the balance of an account.
+      operationId: getAccountBalance
+      responses:
+        "200":
+          description: Account found.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+              example:
+                accountNumber: "1000000001"
+                status: ACTIVE
+                balance:
+                  amount: 25430.5
+                  currency: KES
+                requestId: 395245ae-fe71-4318-adc7-ad408733b0f5
+                timestamp: 2026-10-13T13:43:47.939+03:00
+        "400":
+          description: accountNumber is not exactly 10 digits.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: accountNumber must be exactly 10 digits.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "404":
+          description: No account with that number.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: ACCOUNT_NOT_FOUND
+                  message: No account exists with the supplied account number.
+                  status: 404
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The database is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: DATABASE_ERROR
+                  message: The account service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+      x-wso2-application-security:
+        security-types:
+         - oauth2
+        optional: false
+    parameters:
+     -
+      name: id
+      in: path
+      description: 10-digit account number.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        pattern: "^[0-9]{10}$"
+        type: string
+      example: "1000000001"
+components:
+  schemas:
+    BalanceResponse:
+      required:
+       - accountNumber
+       - balance
+       - requestId
+       - status
+       - timestamp
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        status:
+          type: string
+          enum:
+           - ACTIVE
+           - DORMANT
+           - CLOSED
+        balance:
+          required:
+           - amount
+           - currency
+          type: object
+          properties:
+            amount:
+              type: number
+              format: double
+            currency:
+              type: string
+              example: KES
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+    Error:
+      required:
+       - error
+       - requestId
+       - timestamp
+      type: object
+      properties:
+        error:
+          required:
+           - code
+           - message
+           - status
+          type: object
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: "Safe, human-readable message. Never contains backend or SQL details."
+            status:
+              type: integer
+              description: "HTTP status code, repeated in the body."
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+      description: Standard error envelope used by every Jamii Savings API.
+  headers:
+    CorrelationId:
+      description: Correlation ID for tracing this call across systems.
+      style: simple
+      explode: false
+      schema:
+        type: string
+  securitySchemes:
+    default:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.com
+          scopes: {}
+x-wso2-auth-header: Authorization
+x-wso2-api-key-header: ApiKey
+x-wso2-cors:
+  corsConfigurationEnabled: false
+  accessControlAllowOrigins:
+   - '*'
+  accessControlAllowCredentials: false
+  accessControlAllowHeaders:
+   - authorization
+   - Access-Control-Allow-Origin
+   - Content-Type
+   - SOAPAction
+   - apikey
+   - Internal-Key
+  accessControlAllowMethods:
+   - GET
+   - PUT
+   - POST
+   - DELETE
+   - PATCH
+   - OPTIONS
+x-wso2-production-endpoints:
+  urls:
+   - http://localhost:8290/accounts
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+   - http://localhost:8290/accounts
+  type: http
+x-wso2-basePath: /accounts/1.0.0
+x-wso2-transports:
+ - http
+ - https
+x-wso2-application-security:
+  security-types:
+   - oauth2
+  optional: false
+x-wso2-response-cache:
+  enabled: false
+  cacheTimeoutInSeconds: 300

@@ -1,0 +1,607 @@
+openapi: 3.0.1
+info:
+  title: JamiiBankingProduct
+  version: 1.0.0
+servers:
+ -
+  url: /
+security:
+ -
+  default: []
+paths:
+  /eligibility:
+    post:
+      tags:
+       - Loans
+      summary: Check loan eligibility
+      description: An applicant is eligible when the requested amount is below 12 times their monthly income.
+      operationId: checkLoanEligibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EligibilityRequest"
+            example:
+              applicantId: A123
+              monthlyIncome: 80000
+              requestedAmount: 500000
+        required: true
+      responses:
+        "200":
+          description: Decision made.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EligibilityResponse"
+              example:
+                applicantId: A123
+                decision: ELIGIBLE
+                eligible: true
+                requestedAmount: 500000
+                monthlyIncome: 80000
+                loanToIncomeMultiple: 6
+                policy: requestedAmount must be below 12 x monthlyIncome
+                requestId: 9b53d303-ecc0-4278-9f08-cddf0a7acb97
+                timestamp: 2026-10-11T14:00:47.127+03:00
+        "400":
+          description: "Body is not valid JSON, or a field is missing or malformed."
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: Request body must be valid JSON.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "502":
+          description: The eligibility service could not evaluate the request (for example it returned a SOAP fault).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: ELIGIBILITY_SERVICE_ERROR
+                  message: The eligibility service could not evaluate this request.
+                  status: 502
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The eligibility service is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_UNAVAILABLE
+                  message: The eligibility service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "504":
+          description: The eligibility service timed out.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_TIMEOUT
+                  message: The eligibility service took too long to respond.
+                  status: 504
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+  /{id}/balance:
+    get:
+      tags:
+       - Accounts
+      summary: Get the balance of an account
+      description: Get the balance of an account.
+      operationId: getAccountBalance
+      responses:
+        "200":
+          description: Account found.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+              example:
+                accountNumber: "1000000001"
+                status: ACTIVE
+                balance:
+                  amount: 25430.5
+                  currency: KES
+                requestId: 395245ae-fe71-4318-adc7-ad408733b0f5
+                timestamp: 2026-10-13T13:43:47.939+03:00
+        "400":
+          description: accountNumber is not exactly 10 digits.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: accountNumber must be exactly 10 digits.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "404":
+          description: No account with that number.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: ACCOUNT_NOT_FOUND
+                  message: No account exists with the supplied account number.
+                  status: 404
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The database is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: DATABASE_ERROR
+                  message: The account service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+    parameters:
+     -
+      name: id
+      in: path
+      description: 10-digit account number.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        pattern: "^[0-9]{10}$"
+        type: string
+      example: "1000000001"
+  /{id}:
+    get:
+      tags:
+       - Customers
+      summary: Get a customer by ID
+      description: Get a customer by ID.
+      operationId: getCustomer
+      parameters:
+       -
+        name: X-Correlation-ID
+        in: header
+        description: "Optional trace ID (8-64 letters, digits or dashes). Generated if absent or invalid."
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Customer found.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: customerId is not 1 to 10 digits.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: customerId must be 1 to 10 digits.
+                  status: 400
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "404":
+          description: No customer with that ID.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: CUSTOMER_NOT_FOUND
+                  message: No customer exists with the supplied customer ID.
+                  status: 404
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "401":
+          description: Missing or invalid credentials (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+                  status: 401
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "429":
+          description: Rate limit exceeded for your subscription tier (returned by the API gateway).
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: THROTTLED
+                  message: Message throttled out
+                  status: 429
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "502":
+          description: The customer service returned an unexpected response.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BAD_GATEWAY
+                  message: The customer service returned an unexpected response.
+                  status: 502
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "503":
+          description: The customer service is unavailable.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_UNAVAILABLE
+                  message: The customer service is temporarily unavailable. Please try again later.
+                  status: 503
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+        "504":
+          description: The customer service timed out.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: BACKEND_TIMEOUT
+                  message: The customer service took too long to respond.
+                  status: 504
+                requestId: 4d05769d-c9ab-428f-bea5-f5732c594b60
+                timestamp: 2026-10-13T14:00:55.337+03:00
+      security:
+       -
+        default: []
+      x-auth-type: Application & Application User
+      x-throttling-tier: Unlimited
+    parameters:
+     -
+      name: id
+      in: path
+      description: "Customer ID, 1 to 10 digits."
+      required: true
+      style: simple
+      explode: false
+      schema:
+        pattern: "^[0-9]{1,10}$"
+        type: string
+      example: "1"
+components:
+  schemas:
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            suite:
+              type: string
+            city:
+              type: string
+            zipcode:
+              type: string
+            geo:
+              type: object
+              properties:
+                lat:
+                  type: string
+                lng:
+                  type: string
+        company:
+          type: object
+          properties:
+            name:
+              type: string
+            catchPhrase:
+              type: string
+            bs:
+              type: string
+      description: "Customer record, passed through from the backend service."
+    Error:
+      required:
+       - error
+       - requestId
+       - timestamp
+      type: object
+      properties:
+        error:
+          required:
+           - code
+           - message
+           - status
+          type: object
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: "Safe, human-readable message. Never contains backend or SQL details."
+            status:
+              type: integer
+              description: "HTTP status code, repeated in the body."
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+      description: Standard error envelope used by every Jamii Savings API.
+    EligibilityRequest:
+      required:
+       - applicantId
+       - monthlyIncome
+       - requestedAmount
+      type: object
+      properties:
+        applicantId:
+          pattern: "^[A-Za-z0-9-]{1,20}$"
+          type: string
+        monthlyIncome:
+          maximum: 999999999
+          minimum: 0
+          type: integer
+          description: Whole number. 0 is accepted and makes the upstream service fault (used to demonstrate fault mapping).
+        requestedAmount:
+          maximum: 999999999
+          minimum: 1
+          type: integer
+    EligibilityResponse:
+      required:
+       - applicantId
+       - decision
+       - eligible
+       - loanToIncomeMultiple
+       - monthlyIncome
+       - requestId
+       - requestedAmount
+       - timestamp
+      type: object
+      properties:
+        applicantId:
+          type: string
+        decision:
+          type: string
+          enum:
+           - ELIGIBLE
+           - NOT_ELIGIBLE
+        eligible:
+          type: boolean
+        requestedAmount:
+          type: integer
+        monthlyIncome:
+          type: integer
+        loanToIncomeMultiple:
+          type: integer
+          description: Whole-number result of requestedAmount divided by monthlyIncome.
+        policy:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+    BalanceResponse:
+      required:
+       - accountNumber
+       - balance
+       - requestId
+       - status
+       - timestamp
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        status:
+          type: string
+          enum:
+           - ACTIVE
+           - DORMANT
+           - CLOSED
+        balance:
+          required:
+           - amount
+           - currency
+          type: object
+          properties:
+            amount:
+              type: number
+              format: double
+            currency:
+              type: string
+              example: KES
+        requestId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+  headers:
+    CorrelationId:
+      description: Correlation ID for tracing this call across systems.
+      style: simple
+      explode: false
+      schema:
+        type: string
+  securitySchemes:
+    default:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.com
+          scopes: {}
+          x-scopes-bindings: {}

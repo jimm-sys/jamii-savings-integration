@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SOAP 1.1 backend for loan eligibility (dneonline Calculator used as a stand-in
+     for a credit-scoring service). format="soap11" makes MI wrap our XML in a SOAP
+     envelope and send SOAPAction/Content-Type the way an ASMX service expects.
+     Timeout + 5s circuit breaker mirror CustomerBackendEP. -->
+<endpoint name="EligibilitySoapEP" xmlns="http://ws.apache.org/ns/synapse">
+    <address uri="http://www.dneonline.com/calculator.asmx" format="soap11">
+        <timeout>
+            <duration>5000</duration>
+            <responseAction>fault</responseAction>
+        </timeout>
+        <suspendOnFailure>
+            <errorCodes>101503,101504</errorCodes>
+            <initialDuration>5000</initialDuration>
+            <progressionFactor>1.0</progressionFactor>
+            <maximumDuration>5000</maximumDuration>
+        </suspendOnFailure>
+    </address>
+</endpoint>

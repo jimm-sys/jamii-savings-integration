@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Allow-list approach to response headers.
+     Removes EVERY transport header the message inherited (backend fingerprints, CDN and
+     rate-limit headers, and request headers MI echoes back), then adds back only what we
+     choose to expose: the correlation ID. Content-Type is set by the message formatter. -->
+<sequence name="JamiiStripHeadersSeq" xmlns="http://ws.apache.org/ns/synapse">
+    <property name="TRANSPORT_HEADERS" action="remove" scope="axis2"/>
+    <filter source="get-property('CORR_ID')" regex=".+">
+        <then>
+            <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
+        </then>
+    </filter>
+</sequence>
