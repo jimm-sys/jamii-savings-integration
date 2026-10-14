@@ -5,8 +5,7 @@
             <property name="REQUEST_ID" expression="fn:substring-after(get-property('MessageID'), 'urn:uuid:')"/>
             <property name="MASKED_CUST" expression="fn:concat('****', fn:substring(get-property('uri.var.customerId'), fn:string-length(get-property('uri.var.customerId')) - 1))"/>
 
-            <!-- 1. Correlation ID: keep the caller's if it looks sane, otherwise generate one.
-                    (Validating it stops log-injection via a crafted header.) -->
+        
             <filter source="get-property('transport','X-Correlation-ID')" regex="^[A-Za-z0-9-]{8,64}$">
                 <then>
                     <property name="CORR_ID" expression="get-property('transport','X-Correlation-ID')"/>
@@ -22,10 +21,9 @@
                 <property name="customer" expression="get-property('MASKED_CUST')"/>
             </log>
 
-            <!-- 2. Validate input -> 400, never 500 -->
+        
             <filter source="get-property('uri.var.customerId')" regex="^[0-9]{1,10}$">
                 <then>
-                    <!-- 3. Outbound headers: add correlation ID, do not leak gateway credentials -->
                     <header name="X-Correlation-ID" scope="transport" expression="get-property('CORR_ID')"/>
                     <header name="Authorization" action="remove" scope="transport"/>
                     <header name="X-Internal-Auth" action="remove" scope="transport"/>
@@ -48,7 +46,6 @@
                         <property name="backendStatus" expression="get-property('BACKEND_SC')"/>
                     </log>
 
-                    <!-- 4. Map the backend outcome onto our own contract -->
                     <switch source="get-property('BACKEND_SC')">
                         <case regex="2[0-9][0-9]">
                             <sequence key="JamiiStripHeadersSeq"/>
@@ -89,7 +86,6 @@
             </filter>
         </inSequence>
         <faultSequence>
-            <!-- Backend unreachable / timed out. Cause goes to the log only. -->
             <log level="custom">
                 <property name="event" value="BACKEND_FAULT"/>
                 <property name="correlationId" expression="get-property('CORR_ID')"/>
