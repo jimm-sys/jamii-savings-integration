@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Shared error responder used by ALL Jamii Savings APIs.
-  Caller sets three properties before invoking it:
-    ERR_HTTP_SC  - HTTP status to return (400, 404, 503 ...)
-    ERR_CODE     - stable machine-readable code (INVALID_REQUEST, ACCOUNT_NOT_FOUND ...)
-    ERR_MESSAGE  - safe, human-readable message (never raw backend/SQL/SOAP text)
--->
+
 <sequence name="JamiiErrorSeq" xmlns="http://ws.apache.org/ns/synapse">
     <sequence key="JamiiStripHeadersSeq"/>
     <property name="HTTP_SC" expression="get-property('ERR_HTTP_SC')" scope="axis2"/>
