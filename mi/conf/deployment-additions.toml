@@ -1,4 +1,3 @@
-# Add to <MI_HOME>/conf/deployment.toml (then restart MI). DEMO credentials only.
 
 [[datasource]]
 id = "JamiiDB"
