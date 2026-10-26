@@ -34,12 +34,6 @@ Three integrations on **WSO2 Micro Integrator 4.6.0**, published through **WSO2 
 - **apictl projects are exports of the running APIM**, so the repo holds exactly what was verified.
 - **Pipeline (`Jenkinsfile`):** one pipeline loops over all three APIs. Stages: static tests, build the CAR, check the APIM projects, deploy DEV, then an optional approved PROD stage. Phase 1 of the APIM import uses `--skip-deployments` (nothing reaches the gateway); phase 2 deploys; any failure fails the build with the failed names. `dev` is wired up; `prod` needs `DEPLOY_PROD` plus a manual approval. Credentials come from Jenkins; `apictl logout` runs afterwards because apictl stores credentials in plain text.
 
-## Assumptions
-- Demo credentials only (`jamii/jamii123`, APIM `admin/admin`); real deployments would use a secret store and Secure Vault.
-- Windows machine without virtualization, so everything runs natively (no docker-compose).
-- Account numbers are 10 digits, customer IDs numeric, amounts whole numbers.
-- The public SOAP and REST services are reachable; they are third parties and TLS is off for local MI-to-SOAP.
-
 ## What I would do differently with more time
 - Return our error envelope for gateway errors (401/429); they currently use WSO2's native format.
 - A path that does not match any route gets MI's bare 404 instead of our JSON.
